@@ -1,8 +1,15 @@
-# Open-Weavy
+# Vibe Workflow
 
-**Open-Weavy** is an open-source alternative to [Weavy.ai](https://weavy.ai) (acquired by Figma), designed to empower creators with "Artistic Intelligence". It features a node-based workflow editor for designing, editing, and composing AI-generated content with professional precision.
+**Vibe Workflow** is an open-source alternative to [Weavy.ai](https://weavy.ai), **FloraFauna**, **Freepik Spaces**, and **Krea Workflows**. Designed to empower creators with "Artistic Intelligence," it features a node-based workflow editor for designing, editing, and composing AI-generated content with professional precision.
 
-<img width="1536" height="1024" alt="ow" src="https://github.com/user-attachments/assets/a11ff6c1-83bf-4c09-ac58-03ccffffd84c" />
+<img width="1536" height="1024" alt="vw" src="https://github.com/user-attachments/assets/a11ff6c1-83bf-4c09-ac58-03ccffffd84c" />
+
+## Why Vibe Workflow?
+
+Vibe Workflow bridges the gap between complex AI capabilities and intuitive design. While tools like Weavy and Krea offer powerful node-based systems, Vibe Workflow provides an open-source, flexible foundation for:
+- **Creative Professionals**: Build custom pipelines for high-volume asset production.
+- **Studios**: Maintain brand consistency across hundreds of variations.
+- **Developers**: Extend and integrate generative AI into existing workflows.
 
 ## Features
 
@@ -15,7 +22,7 @@
 This project follows a hybrid monorepo structure:
 
 ```text
-Open-Weavy/
+Vibe-Workflow/
 ├── client/              # Next.js frontend application
 ├── packages/
 │   └── workflow-builder/ # Shared UI library (The core node editor)
@@ -34,8 +41,8 @@ Open-Weavy/
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/yourusername/open-weavy.git
-    cd open-weavy
+    git clone https://github.com/yourusername/vibe-workflow.git
+    cd vibe-workflow
     ```
 
 2.  **Install dependencies** (from the root directory):
@@ -97,7 +104,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ## Contributing
 
-We welcome contributions to Open-Weavy! Please see `CONTRIBUTING.md` for details.
+We welcome contributions to Vibe Workflow! Please see `CONTRIBUTING.md` for details.
 
 ## License
 

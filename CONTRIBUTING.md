@@ -1,20 +1,21 @@
-# Contributing to Open-Weavy
+# Contributing to Vibe Workflow
 
-Thank you for your interest in contributing to Open-Weavy! We welcome contributions from everyone.
+Thank you for your interest in contributing to Vibe Workflow! We welcome contributions from everyone.
+
+Here are some guidelines to help you get started:
 
 ## Getting Started
 
-1.  **Fork the repository** on GitHub.
-2.  **Clone your fork** locally:
+1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/your-username/open-weavy.git
-    cd open-weavy
+    git clone https://github.com/your-username/vibe-workflow.git
+    cd vibe-workflow
     ```
-3.  **Install dependencies**:
+2.  **Install dependencies**:
     ```bash
     npm install
     ```
-4.  **Create a branch** for your feature or bugfix:
+3.  **Create a branch** for your feature or bugfix:
     ```bash
     git checkout -b feature/amazing-feature
     ```
