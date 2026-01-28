@@ -110,8 +110,23 @@ export const imageModels = [
     input_params: {}
   },
   {
+    id: "wan2.6-text-to-image",
+    name: "Wan 2.6 Text to Image",
+    input_params: {}
+  },
+  {
+    id: "wan2.6-image-edit",
+    name: "Wan 2.6 Image Edit",
+    input_params: {}
+  },
+  {
     id: "qwen-image",
     name: "Qwen Image",
+    input_params: {}
+  },
+  {
+    id: "qwen-image-edit-2511",
+    name: "Qwen Image Edit 2511",
     input_params: {}
   },
   {
@@ -259,6 +274,38 @@ export const videoModels = [
     name: "Seedance Pro I2V Fast",
     input_params: {}
   },
+
+  {
+    id: "seedance-v1.5-pro-i2v",
+    name: "Seedance v1.5 Pro I2V",
+    input_params: {}
+  },
+  {
+    id: "seedance-v1.5-pro-t2v",
+    name: "Seedance v1.5 Pro T2V",
+    input_params: {}
+  },
+  {
+    id: "seedance-v1.5-pro-i2v-fast",
+    name: "Seedance v1.5 Pro I2V Fast",
+    input_params: {}
+  },
+  {
+    id: "seedance-v1.5-pro-t2v-fast",
+    name: "Seedance v1.5 Pro T2V Fast",
+    input_params: {}
+  },
+  {
+    id: "seedance-v1.5-pro-video-extend",
+    name: "Seedance v1.5 Pro Video Extend",
+    input_params: {}
+  },
+  {
+    id: "seedance-v1.5-pro-video-extend-fast",
+    name: "Seedance v1.5 Pro Video Extend Fast",
+    input_params: {}
+  },
+
   {
     id: "veo3.1-image-to-video",
     name: "Veo3.1 I2V",
@@ -392,6 +439,11 @@ export const videoModels = [
   {
     id: "kling-v2.6-pro-i2v",
     name: "Kling v2.6 Pro I2V",
+    input_params: {}
+  },
+  {
+    id: "kling-v2.6-pro-motion-control",
+    name: "Kling v2.6 Pro Motion Control",
     input_params: {}
   },
   {
@@ -625,6 +677,65 @@ export const apiNodeModels = [
         },
       },
       required: ["model_url", "api_key"],
+    }
+  },
+  {
+    id: "straico",
+    name: "Straico API",
+    input_params: {
+      properties: {
+        "model_name": {
+          "enum": [],
+          "description": "Name of the model (e.g. sd-xl)",
+          "type": "string",
+          "default": "",
+          "required": true
+        },
+        "model_type": {
+          "enum": ["chat", "image", "video", "audio"],
+          "default": "chat",
+          "description": "Type of the model (e.g. chat, image, video, audio)",
+          "type": "string",
+          "required": true
+        },
+        "api_key": {
+          "examples": "",
+          "description": "API Key for Straico.",
+          "type": "string",
+          "format": "text",
+          "required": true
+        },
+      },
+      required: ["model_name", "model_type", "api_key"],
+    }
+  },
+  {
+    id: "runware",
+    name: "Runware API",
+    input_params: {
+      properties: {
+        "api_key": {
+          "description": "Runware API Key",
+          "type": "string",
+          "format": "text",
+          "required": true
+        },
+        "task_type": {
+          "enum": ["imageInference", "textToVideo", "imageToVideo", "upscale", "removeBackground"],
+          "description": "Task type (e.g. imageInference, textToVideo, imageToVideo, upscale)",
+          "type": "string",
+          "default": "imageInference",
+          "required": true
+        },
+        "model_name": {
+          "enum": [],
+          "description": "AIR identifier of the model",
+          "type": "string",
+          "default": "",
+          "required": false
+        }
+      },
+      required: ["task_type", "api_key"]
     }
   }
 ];

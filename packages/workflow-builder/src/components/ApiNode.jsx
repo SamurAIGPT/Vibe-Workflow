@@ -29,6 +29,7 @@ const ApiNode = ({ id, data, selected }) => {
   const { setNodes, setEdges } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const edges = useStore((state) => state.edges);
+  const modelSchema = nodeSchemas?.categories?.api?.models[selectedModel.id];
 
   const initializeFormData = (schemaProperties) => {
     const initialData = {};
@@ -79,7 +80,9 @@ const ApiNode = ({ id, data, selected }) => {
     const defaults = initializeFormData(properties);
 
     const validKeys = Object.keys(properties);
-    const filteredFormValues = Object.entries(data.formValues || {}).reduce((acc, [key, val]) => {
+    // Merge from both prop data and current local state
+    const currentValues = { ...(data.formValues || {}), ...formValues };
+    const filteredFormValues = Object.entries(currentValues).reduce((acc, [key, val]) => {
       if (validKeys.includes(key)) acc[key] = val;
       return acc;
     }, {});
@@ -87,8 +90,14 @@ const ApiNode = ({ id, data, selected }) => {
     const merged = Object.entries({ ...defaults, ...filteredFormValues }).reduce(
       (acc, [key, val]) => {
         const meta = properties[key];
-        if (meta?.enum && !meta.enum.includes(val)) {
-          acc[key] = meta.default ?? meta.enum[0] ?? "";
+        if (meta?.enum) {
+          const optionValues = meta.enum.map(opt => typeof opt === 'object' ? opt.value : opt);
+          if (!optionValues.includes(val)) {
+            const firstOption = meta.enum[0];
+            acc[key] = meta.default ?? (typeof firstOption === 'object' ? firstOption.value : firstOption) ?? "";
+          } else {
+            acc[key] = val;
+          }
         } else {
           acc[key] = val;
         }
@@ -107,33 +116,77 @@ const ApiNode = ({ id, data, selected }) => {
     }
 
     axios.get(`/api/workflow/${workflowId}/api-node-schemas`)
-    .then((response) => {
-      const schemas = response.data.api_node_schemas;
-      if (schemas[id]) {
-        const schemaObj = schemas[id]?.schema;
-        const inputSchema = schemaObj?.input_schema;
+      .then((response) => {
+        const schemas = response.data.api_node_schemas;
+        if (schemas[id]) {
+          const schemaObj = schemas[id]?.schema;
+          const inputSchema = schemaObj?.input_schema;
+          const modelProps = selectedModel.input_params?.properties || {};
+          const configProps = {};
+        
+        Object.entries(modelProps).forEach(([key, schema]) => {
+          configProps[key] = {
+            ...schema,
+            default: formValues[key] || schema.default || "",
+            required: selectedModel.input_params?.required?.includes(key) || schema.required
+          };
+        });
+
+        if (selectedModel.id === 'straico') {
+          const currentDynamicSchemas = modelSchema?.dynamic_schemas || data.dynamicSchemas;
+          if (currentDynamicSchemas) {
+            const modelNames = Object.values(currentDynamicSchemas).map(m => m.model_id);
+            if (configProps['model_name']) {
+              configProps['model_name'] = {
+                ...configProps['model_name'],
+                enum: modelNames,
+                allowManual: true
+              };
+            }
+          }
+        }
+
+        if (selectedModel.id === 'runware') {
+          const runwareModels = schemaObj?.dynamic_schemas?.models || inputSchema?.model_name?.enum || inputSchema?.model_id?.enum;
+          if (runwareModels && configProps['model_name']) {
+            configProps['model_name'] = {
+              ...configProps['model_name'],
+              enum: runwareModels,
+              allowManual: true
+            };
+          }
+        }
+
         const fullProps = {
-          model_url: {
-            type: "string",
-            default: formValues.model_url || "",
-            required: true,
-          },
-          api_key: {
-            type: "string",
-            default: formValues.api_key || "",
-            required: true,
-          },
+          ...configProps,
           ...inputSchema,
         };
         addFormValuesInTaskData(fullProps);
-        const prevTaskData = apiNodeModels[0].input_params?.properties
-        setTaskData({ ...prevTaskData, ...inputSchema, });
+        setTaskData(fullProps);
+
+        const keysToExpose = Object.entries(inputSchema || {})
+          .filter(([key, schema]) => schema?.ui?.can_link_from_node === true)
+          .map(([key]) => key);
+
+        if (keysToExpose.length > 0) {
+          setNodes((nds) => nds.map((n) => {
+            if (n.id === id) {
+              const currentExposed = n.data.exposedHandles || [];
+              const uniqueExposed = [...new Set([...currentExposed, ...keysToExpose])];
+              
+              if (uniqueExposed.length !== currentExposed.length) {
+                return { ...n, data: { ...n.data, exposedHandles: uniqueExposed } };
+              }
+            }
+            return n;
+          }));
+        }
       } else {
         toast.warn(`No schema found for id: ${id}`);
       }
       setLoading(0);
     })
-    .catch((error) => {
+      .catch((error) => {
       setLoading(0);
       toast.error(error.response?.data?.detail || "Failed to fetch model details.");
       console.error(error);
@@ -141,10 +194,50 @@ const ApiNode = ({ id, data, selected }) => {
   };
 
   useEffect(() => {    
-    if (data?.formValues?.model_url && data?.formValues?.model_url !== "") {
+    let baseProperties = { ...(selectedModel.input_params?.properties || {}) };
+    
+    if (selectedModel.id === 'straico' && modelSchema?.dynamic_schemas) {
+      const modelNames = Object.values(modelSchema.dynamic_schemas).map(m => m.model_id);
+      if (baseProperties['model_name']) {
+        baseProperties['model_name'] = { 
+          ...baseProperties['model_name'], 
+          enum: modelNames,
+          allowManual: true 
+        };
+      }
+    }
+
+    if (selectedModel.id === 'runware' && modelSchema?.dynamic_schemas) {
+      const taskType = formValues.task_type || "imageInference";
+      const taskSchema = modelSchema.dynamic_schemas[taskType];
+      
+      if (taskSchema && taskSchema.schema?.input_schema) {
+        const inputSchema = taskSchema.schema.input_schema;
+        const modelEnum = inputSchema.model_name?.enum || inputSchema.model_id?.enum;
+        
+        if (modelEnum && baseProperties['model_name']) {
+          baseProperties['model_name'] = { 
+            ...baseProperties['model_name'], 
+            enum: modelEnum,
+            allowManual: true 
+          };
+        }
+      }
+    }
+    setTaskData(baseProperties);
+    
+    // Ensure formValues has defaults for the current model
+    if (Object.keys(formValues).length === 0 || (selectedModel.id === 'runware' && !formValues.task_type)) {
+      addFormValuesInTaskData(baseProperties);
+    }
+
+    const requiredFields = selectedModel.input_params?.required || [];
+    const allRequiredPresent = requiredFields.every(field => (formValues?.[field] || data?.formValues?.[field]) && (formValues?.[field] || data?.formValues?.[field]) !== "");
+    
+    if (requiredFields.length > 0 && allRequiredPresent) {
       fetchSchema(workflowId);
     }
-  }, []);
+  }, [selectedModel, modelSchema, formValues.task_type]);
 
   useEffect(() => {
     if (data.triggerRun) {
@@ -258,14 +351,13 @@ const ApiNode = ({ id, data, selected }) => {
         return;
       }
 
-      const modelSchema = nodeSchemas?.categories?.api?.models[selectedModel.id];
       if (!modelSchema || !modelSchema.input_schema) {
         toast.error("No input schema found for this model");
         data.onDataChange(id, { isLoading: false });
         return;
       }
       const params = {};
-      const inputSchema = modelSchema.input_schema;
+      const inputSchema = modelSchema?.input_schema || {};
       const localSources = formValues || {};
       for (const [key, meta] of Object.entries(inputSchema)) {
         if (localSources.hasOwnProperty(key)) {
@@ -277,7 +369,7 @@ const ApiNode = ({ id, data, selected }) => {
 
       const filteredInputParams = Object.fromEntries(
         Object.entries(formValues).filter(([key]) =>
-          key !== "model_url" && key !== "api_key"
+          key !== "model_url" && key !== "api_key" && key !== "model_type" && key !== "model_name"
         )
       );
       params["params"] = filteredInputParams;
@@ -306,13 +398,11 @@ const ApiNode = ({ id, data, selected }) => {
   };
 
   const fetchInputs = async () => {
-    if (!formValues?.model_url || !formValues.model_url.trim()) {
-      toast.error("Model URL is required before fetching schema");
-      return;
-    }
+    const requiredFields = selectedModel.input_params?.required || [];
+    const missingFields = requiredFields.filter(field => !formValues?.[field] || !formValues[field].trim());
 
-    if (!formValues?.api_key || !formValues.api_key.trim()) {
-      toast.error("API Key is required before fetching schema");
+    if (missingFields.length > 0) {
+      toast.error(`${missingFields} required before fetching schema`);
       return;
     }
 
@@ -346,7 +436,9 @@ const ApiNode = ({ id, data, selected }) => {
     setConnectedInputs(connectedInputs);
   }, [edges, id, taskData]);  
 
-  const minHeight = Math.max(208, 150 + Object.keys(taskData).length * 50);
+  const hardcodedKeys = Object.keys(selectedModel.input_params?.properties || {});
+  const filteredTaskDataEntries = Object.entries(taskData).filter(([key]) => !hardcodedKeys.includes(key));
+  const minHeight = Math.max(208, 150 + filteredTaskDataEntries.length * 50);
 
   return (
     <div 
@@ -388,11 +480,27 @@ const ApiNode = ({ id, data, selected }) => {
             {data.errorMsg || "Failed Generation"}
           </div>
         ) : data.resultUrl && !data.isLoading ? (
-          <img
-            src={data.resultUrl}
-            alt="Generated"
-            className="w-full h-full rounded-md object-contain"
-          />
+          (() => {
+            const output = data.outputs?.[0];
+            const isVideo = output?.type === 'video_url' || (data.resultUrl && (data.resultUrl.toLowerCase().endsWith('.mp4') || data.resultUrl.toLowerCase().endsWith('.webm') || data.resultUrl.toLowerCase().endsWith('.mov')));
+        
+            if (isVideo) {
+              return (
+                <video
+                  src={data.resultUrl}
+                  controls
+                  className="w-full h-full rounded-md object-contain"
+                />
+              );
+            }
+            return (
+              <img
+                src={data.resultUrl}
+                alt="Generated"
+                className="w-full h-full rounded-md object-contain"
+              />
+            );
+          })()
         ) : (
           <p className="text-gray-400 text-sm italic">Generation results appeared here...</p>
         )}
@@ -412,36 +520,71 @@ const ApiNode = ({ id, data, selected }) => {
         </button>
       </div>
       
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        id="apiOutput" 
-        style={{ 
-          top: 100,
-          width: 12,
-          height: 12,
-          transition: 'all 0.2s ease-in-out',
-        }} 
-        className={`!rounded-full !border-2 transition-all duration-200 !right-[-7px]
-          ${connectedOutputs.apiOutput 
-            ? '!bg-green-500 !border-white shadow-[0_0_20px_rgba(34,197,94,1)]' 
-            : '!bg-black !border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.5)]'
-          }
-          hover:!scale-125 hover:shadow-[0_0_20px_rgba(34,197,94,1)]
-        `}
-        data-type="green"
-      />
-      <p 
-        className={`absolute -right-10 top-[100px] text-xs text-green-500 transition-opacity duration-200 ${
-          data.activeHandleColor === "green"
-            ? "opacity-100" 
-            : "opacity-0 group-hover:opacity-100"
-        }`}
-      > 
-        Image 
-      </p>
+      {(() => {
+        let outputColor = "green";
+        let activeClass = "!bg-green-500 !border-white shadow-[0_0_20px_rgba(34,197,94,1)]";
+        let inactiveClass = "!bg-black !border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.5)]";
+        let labelText = "Image";
+        let labelColor = "text-green-500";
+        
+        const output = data.outputs?.[0];
+        const modelType = formValues.model_type; // || selectedModel.model_type?
 
-      {Object.entries(taskData).map(([key, meta], idx) => {
+        if (output?.type === 'text' || modelType === 'chat') {
+          outputColor = "blue";
+          activeClass = "!bg-blue-500 !border-white shadow-[0_0_20px_rgba(59,130,246,1)]";
+          inactiveClass = "!bg-black !border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.5)]";
+          labelText = "Text";
+          labelColor = "text-blue-500";
+        } else if (output?.type === 'video_url' || modelType === 'video') {
+          outputColor = "orange";
+          activeClass = "!bg-orange-500 !border-white shadow-[0_0_20px_rgba(249,115,22,1)]";
+          inactiveClass = "!bg-black !border-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.5)]";
+          labelText = "Video";
+          labelColor = "text-orange-500";
+        } else if (output?.type === 'audio_url' || modelType === 'audio') {
+          outputColor = "yellow";
+          activeClass = "!bg-yellow-500 !border-white shadow-[0_0_20px_rgba(234,179,8,1)]";
+          inactiveClass = "!bg-black !border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.5)]";
+          labelText = "Audio";
+          labelColor = "text-yellow-500";
+        }
+
+        return (
+          <>
+          <Handle 
+            type="source" 
+            position={Position.Right} 
+            id="apiOutput" 
+            style={{ 
+              top: 100,
+              width: 12,
+              height: 12,
+              transition: 'all 0.2s ease-in-out',
+            }} 
+            className={`!rounded-full !border-2 transition-all duration-200 !right-[-7px]
+              ${connectedOutputs.apiOutput 
+                ? activeClass
+                : inactiveClass
+              }
+              hover:!scale-125
+            `}
+            data-type={outputColor}
+          />
+          <p 
+            className={`absolute -right-10 top-[100px] text-xs ${labelColor} transition-opacity duration-200 ${
+              data.activeHandleColor === outputColor
+                ? "opacity-100" 
+                : "opacity-0 group-hover:opacity-100"
+            }`}
+          > 
+            {labelText}
+          </p>
+          </>
+        );
+      })()}
+
+      {filteredTaskDataEntries.map(([key, meta], idx) => {
         const isExposed = connectedInputs[key] || exposedHandles.includes(key);
         return (
           <React.Fragment key={key}>
@@ -459,15 +602,15 @@ const ApiNode = ({ id, data, selected }) => {
               }} 
               className={`!rounded-full !border-2 transition-all duration-200 !left-[-7px]
                 ${connectedInputs[key] 
-                  ? '!bg-blue-500 !border-white shadow-[0_0_20px_rgba(59,130,246,1)]' 
-                  : '!bg-black !border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.5)]'
+                  ? '!bg-white !border-black shadow-[0_0_20px_rgba(255,255,255,1)]' 
+                  : '!bg-black !border-white shadow-[0_0_20px_rgba(255,255,255,0.5)]'
                 }
-                hover:!scale-125 hover:shadow-[0_0_20px_rgba(59,130,246,1)]
+                hover:!scale-125 hover:shadow-[0_0_20px_rgba(255,255,255,1)]
               `}
-              data-type="blue"
+              data-type="white"
             />
             <p 
-              className={`absolute -left-20 top-[${150 + idx * 0}px] text-xs text-blue-500 text-right w-16 transition-opacity duration-200 ${
+              className={`absolute -left-20 top-[${150 + idx * 50}px] text-xs text-white text-right w-16 transition-opacity duration-200 ${
                 isExposed
                   ? "opacity-100" 
                   : "opacity-0 group-hover:opacity-100"

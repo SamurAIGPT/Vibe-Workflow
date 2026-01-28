@@ -115,3 +115,15 @@ async def get_file_upload_url_helper(params: dict):
     query_string = urllib.parse.urlencode(params)
     url = f"https://api.muapi.ai/app/get_file_upload_url?{query_string}"
     return await proxy_request_helper("GET", url)
+
+async def get_workflow_last_run(workflow_id: str):
+    url = f"https://api.muapi.ai/workflow/get-workflow-last-run/{workflow_id}"
+    return await proxy_request_helper("GET", url)
+
+async def architect_workflow_helper(payload: dict):
+    url = "https://api.muapi.ai/workflow/architect"
+    return await proxy_request_helper("POST", url, payload)
+
+async def poll_architect_result_helper(id: str):
+    url = f"https://api.muapi.ai/workflow/poll-architect/{id}/result"
+    return await proxy_request_helper("GET", url)

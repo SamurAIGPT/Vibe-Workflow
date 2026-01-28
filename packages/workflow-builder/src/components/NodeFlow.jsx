@@ -38,6 +38,7 @@ import ApiNode from "./ApiNode";
 import RenderApiField from "./RenderApiField";
 import AudioGeneration from "./AudioNode";
 import NodesNavbar from "./NodesNavbar"
+import ChatWidget from "./ChatWidget";
 import { AiOutlineAudio } from "react-icons/ai";
 
 const nodeTypes = {
@@ -79,25 +80,42 @@ const edgeStyles = {
   yellow: {
     stroke: '#eab308', // yellow-500
     strokeWidth: 2,
+  },
+  white: {
+    stroke: '#ffffff',
+    strokeWidth: 2,
   }
 };
 
-const getEdgeColor = (sourceHandle, targetHandle) => {
-  if (
-    ["textInput", "imageInput", "videoInput", "audioInput2", "concatInput", "apiInput"].includes(targetHandle) ||
-    ["textOutput", "concatOutput"].includes(sourceHandle)
-  ) {
-    return "blue";
-  } else if (
-    ["textInput2", "textInput3", "imageInput2", "imageInput3", "videoInput2", "videoInput3", "videoInput6", "audioInput3", "apiInput2", "apiInput3"].includes(targetHandle) ||
-    ["imageOutput", "apiOutput"].includes(sourceHandle)
-  ) {
+const getEdgeColor = (sourceHandle, targetHandle, sourceNode = null, targetNode = null) => {
+  if (sourceHandle === "apiOutput" && sourceNode) {
+    const output = sourceNode.data.outputs?.[0];
+    const modelType = sourceNode.data.formValues?.model_type;
+    
+    if (output?.type === 'text' || modelType === 'chat') return "blue";
+    if (output?.type === 'video_url' || modelType === 'video') return "orange";
+    if (output?.type === 'audio_url' || modelType === 'audio') return "yellow";
     return "green";
-  } else if (["videoInput4", "audioInput4"].includes(targetHandle) || ["videoOutput"].includes(sourceHandle)) {
-    return "orange";
-  } else if (["audioInput", "videoInput5"].includes(targetHandle) || ["audioOutput"].includes(sourceHandle)) {
-    return "yellow";
   }
+
+  if (["textOutput", "concatOutput"].includes(sourceHandle)) return "blue";
+  if (["imageOutput"].includes(sourceHandle)) return "green";
+  if (["videoOutput"].includes(sourceHandle)) return "orange";
+  if (["audioOutput"].includes(sourceHandle)) return "yellow";
+
+  if (["textInput", "imageInput", "videoInput", "audioInput2", "concatInput", "apiInput"].includes(targetHandle)) return "blue";
+  if (["textInput2", "textInput3", "imageInput2", "imageInput3", "videoInput2", "videoInput3", "videoInput6", "audioInput3", "apiInput2", "apiInput3"].includes(targetHandle)) return "green";
+  if (["videoInput4", "audioInput4"].includes(targetHandle)) return "orange";
+  if (["audioInput", "videoInput5"].includes(targetHandle)) return "yellow";
+
+  if (sourceNode) {
+    const type = sourceNode.type;
+    if (type === 'textNode' || type === 'concatNode') return "blue";
+    if (type === 'imageNode') return "green";
+    if (type === 'videoNode') return "orange";
+    if (type === 'audioNode') return "yellow";
+  }
+
   return "white";
 };
 
@@ -118,6 +136,7 @@ const NodeFlow = () => {
   const [draggedEdgeInfo, setDraggedEdgeInfo] = useState(null);
   const [edgePicker, setEdgePicker] = useState(null);
   const connectionMadeRef = useRef(false);
+  const onConnectRef = useRef(null);
   const [interactionMode, setInteractionMode] = useState(false);
   const [publishWorkflow, setPublishWorkflow] = useState(false);
   const [template, setTemplate] = useState({
@@ -128,9 +147,22 @@ const NodeFlow = () => {
   const [modelSearch, setModelSearch] = useState("");
   const [isPresetsDismissed, setIsPresetsDismissed] = useState(true);
   const [isRestoring, setIsRestoring] = useState(true);
+  const [isChatOpen, setIsChatOpen] = useState(true);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+
   const { zoomIn, zoomOut, fitView, getNodes, screenToFlowPosition } = useReactFlow();
   const params = useParams();
   const { id } = params;
+
+  const apiModelsFromBackend =
+    nodeSchemas?.categories?.api?.models
+      ? Object.keys(nodeSchemas.categories.api.models)
+      : [];
+
+  const filteredApiNodeModels = apiNodeModels.filter(model =>
+    apiModelsFromBackend.includes(model.id)
+  );
 
   const loadPreset = (preset) => {
     setIsPresetsDismissed(true);
@@ -147,12 +179,20 @@ const NodeFlow = () => {
     "text": <TfiText size={20} />,
   };
 
+  const formatName = (id) => id.replace(/-/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  const SPECIAL_MODEL_NAMES = {
+    "text-passthrough": "Input Text",
+    "image-passthrough": "Input Image",
+    "video-passthrough": "Input Video",
+    "audio-passthrough": "Input Audio",
+  };
+
   useEffect(() => {
     axios.get(`/api/workflow/${id}/node-schemas`)
     .then(res => setNodeSchemas(res.data || {}))
     .catch(err => console.error("Failed to load node schemas", err));
-  
-    const handleMouseMove = (e) => {      
+
+    const handleMouseMove = (e) => {
       setMousePos({ x: e.clientX, y: e.clientY });
     };
     
@@ -162,30 +202,35 @@ const NodeFlow = () => {
 
   useEffect(() => {
     if (!nodeSchemas?.categories) return;
-    setNodes((prev) =>
-      prev.map((n) => ({
+    setNodes((prev) => {
+      const needsUpdate = prev.some((n) => n.data.nodeSchemas !== nodeSchemas);
+      if (!needsUpdate) return prev;
+      
+      return prev.map((n) => ({
         ...n,
         data: {
           ...n.data,
           nodeSchemas,
         },
-      }))
-    );
+      }));
+    });
   }, [nodeSchemas]);
   
   const getModelObj = (category, modelId) => {
-    if (!modelId) return null;
-    if (category === "utility") return concatModels.find(m => m.id === modelId) || null;
-    if (category === "text") return textModels.find(m => m.id === modelId) || null;
-    if (category === "image") return imageModels.find(m => m.id === modelId) || null;
-    if (category === "video") return videoModels.find(m => m.id === modelId) || null;
-    if (category === "audio") return audioModels.find(m => m.id === modelId) || null;
-    if (category === "api") return apiNodeModels.find(m => m.id === modelId) || null;
-    return null;
+    if (category === "api") return filteredApiNodeModels.find(m => m.id === modelId) || null;
+    if (!modelId || !nodeSchemas?.categories) return null;
+    const rawModel = nodeSchemas.categories[category]?.models?.[modelId];
+    if (!rawModel) return null;
+    
+    return {
+      ...rawModel,
+      id: modelId,
+      name: SPECIAL_MODEL_NAMES[modelId] || formatName(modelId)
+    };
   };
 
   useEffect(() => {
-    if (!id) return;
+    if (!id && nodeSchemas?.categories) return;
     // if (id === undefined) return;
 
     axios.get(`/api/workflow/get-workflow-def/${id}`)
@@ -201,6 +246,8 @@ const NodeFlow = () => {
           y: n.position?.y ?? 0 
         },
         data: {
+          nodeSchemas,
+          modelId: n.model,
           selectedModel: getModelObj(n.category, n.model),
           outputs: n.output_params?.outputs || [],
           resultUrl: n.output_params?.resultUrl || null,
@@ -209,11 +256,9 @@ const NodeFlow = () => {
       }));
 
       const restoredEdges = (res.data.edges || []).map((e) => {
-        let edgeColor = getEdgeColor(e.sourceHandle, e.targetHandle);
+        const sourceNode = restoredNodes.find(n => n.id === e.source);
         const targetNode = restoredNodes.find(n => n.id === e.target);
-        if (targetNode && targetNode.type === 'apiNode') {
-          edgeColor = 'blue';
-        }
+        let edgeColor = getEdgeColor(e.sourceHandle, e.targetHandle, sourceNode, targetNode);
 
         return {
           id: e.id || `${e.source}-${e.target}`,
@@ -246,7 +291,7 @@ const NodeFlow = () => {
     .finally(() => {
       setIsRestoring(false);
     });
-  }, []);
+  }, [nodeSchemas]);
 
   useEffect(() => {
     if (isRestoring) return;
@@ -354,7 +399,20 @@ const NodeFlow = () => {
         }
 
         else if (node.type === "apiNode") {
-          updatedFormValues[targetHandle] = sourceValue;
+          const listFields = ["images", "image_urls", "images_list"];
+          const isList = listFields.includes(targetHandle) || node.data.taskData?.[targetHandle]?.type === "array";
+
+          if (isList) {
+            const list = Array.isArray(updatedFormValues[targetHandle])
+              ? [...updatedFormValues[targetHandle]]
+              : [];
+            if (sourceValue && sourceValue.trim() !== "" && !list.includes(sourceValue)) {
+              list.push(sourceValue);
+            }
+            updatedFormValues[targetHandle] = list;
+          } else {
+            updatedFormValues[targetHandle] = sourceValue;
+          }
         }
 
         return {
@@ -426,27 +484,9 @@ const NodeFlow = () => {
         connectionMadeRef.current = true;
       }
       setEdges((eds) => {
+        const sourceNode = nodes.find((n) => n.id === params.source) || {};
         const targetNode = nodes.find((n) => n.id === params.target) || {};
-        let color = 
-          (targetNode.type === "apiNode" && params.targetHandle !== "apiOutput")
-            ? "blue"
-            : ["textInput", "imageInput", "videoInput", "audioInput2", "concatInput", "apiInput"].includes(params.targetHandle) ||
-              ["textOutput", "concatOutput"].includes(params.sourceHandle)
-            ? "blue"
-            : ["textInput2", "textInput3", "imageInput2", "imageInput3", "videoInput2", "videoInput3", "videoInput6", "audioInput3", "apiInput2", "apiInput3"].includes(params.targetHandle) ||
-              ["imageOutput", "apiOutput"].includes(params.sourceHandle)
-            ? "green"
-            : ["videoOutput"].includes(params.sourceHandle) || ["videoInput4", "audioInput4"].includes(params.targetHandle)
-            ? "orange"
-            : ["audioOutput"].includes(params.sourceHandle) || ["audioInput", "videoInput5"].includes(params.targetHandle)
-            ? "yellow"
-            : "gray";
-
-        if (targetNode.type === "apiNode") {
-          color = "blue";
-        }
-
-        const sourceNode = nodes.find((n) => n.id === params.source);
+        let color = getEdgeColor(params.sourceHandle, params.targetHandle, sourceNode, targetNode);
 
         if (color === "blue" && targetNode?.type !== "concatNode" && targetNode.type !== "apiNode") {
           const hasExistingBlueConnection = eds.some(edge => {
@@ -467,7 +507,7 @@ const NodeFlow = () => {
         }
 
         const newEdges = addEdge({ ...params, style: edgeStyles[color] }, eds);
-        if (!sourceNode || !targetNode) return newEdges;
+        if (!sourceNode || !targetNode || !sourceNode.data) return newEdges;
 
         const sourceData = sourceNode.data;
         const resultValue = sourceData.outputs?.[0]?.value || sourceData.resultUrl || null;
@@ -484,7 +524,18 @@ const NodeFlow = () => {
             let updatedFormValues  = { ...n.data.formValues };
 
             if (n.id === params.target && n.type === "apiNode") {
-              updatedFormValues[params.targetHandle] = sourceValue;
+              const listFields = ["images", "image_urls", "images_list"];
+              const isList = listFields.includes(params.targetHandle) || n.data.taskData?.[params.targetHandle]?.type === "array";
+
+              if (isList) {
+                const list = Array.isArray(updatedFormValues[params.targetHandle]) ? [...updatedFormValues[params.targetHandle]]: [];
+                if (sourceValue && sourceValue.trim() !== "" && !list.includes(sourceValue)) {
+                  list.push(sourceValue);
+                }
+                updatedFormValues[params.targetHandle] = list;
+              } else {
+                updatedFormValues[params.targetHandle] = sourceValue;
+              }
             }
 
             if (color === "blue") {
@@ -557,6 +608,172 @@ const NodeFlow = () => {
     [nodes]
   );
 
+  const pollArchitectStatus = (request_id) => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await axios.get(`/api/workflow/poll-architect/${request_id}/result`);
+        const finalData = response.data;
+        const status = finalData.status;
+
+        if (status === "completed") {
+          clearInterval(interval);
+          const { message, suggestions, workflow } = finalData;
+          
+          const newAgentMessage = { 
+            role: "agent", 
+            content: message || "Tasks complete. Your workflow has been updated.",
+            suggestions: suggestions || [],
+            timestamp: new Date().toISOString()
+          };
+          setChatMessages((prev) => [...prev, newAgentMessage]);
+
+          if (workflow && workflow.nodes) {
+            const idMapping = {};
+            const counts = { text: 0, image: 0, video: 0, audio: 0 };
+
+            const newNodes = workflow.nodes.map((n) => {
+              let newId = n.id;
+              const category = n.category;
+              
+              if (["user_text", "prompt_gen"].includes(n.id) || category === "text") {
+                counts.text++;
+                newId = `text${counts.text}`;
+              } else if (n.id === "image_gen" || category === "image") {
+                counts.image++;
+                newId = `image${counts.image}`;
+              } else if (category === "video") {
+                counts.video++;
+                newId = `video${counts.video}`;
+              } else if (category === "audio") {
+                counts.audio++;
+                newId = `audio${counts.audio}`;
+              }
+              
+              idMapping[n.id] = newId;
+              const existingNode = nodes.find((en) => en.id === newId);
+
+              return {
+                id: newId,
+                type: n.category === "utility" ? "concatNode" : `${n.category}Node`,
+                position: existingNode?.position || { 
+                  x: n.position?.x ?? 350, 
+                  y: n.position?.y ?? 0 
+                },
+                data: {
+                  nodeSchemas,
+                  modelId: n.model,
+                  selectedModel: getModelObj(n.category, n.model),
+                  outputs: n.output_params?.outputs || [],
+                  resultUrl: n.output_params?.resultUrl || null,
+                  formValues: n.input_params || n.params || {},
+                }
+              };
+            });
+
+            setNodes(newNodes);
+
+            if (workflow.edges && workflow.edges.length > 0) {
+              const newEdges = workflow.edges.map((e) => {
+                const source = idMapping[e.source] || e.source;
+                const target = idMapping[e.target] || e.target;
+                
+                const sourceNode = newNodes.find(n => n.id === source);
+                const targetNode = newNodes.find(n => n.id === target);
+
+                let sourceHandle = e.sourceHandle;
+                let targetHandle = e.targetHandle;
+
+                if ((!sourceHandle || sourceHandle === 'output') && sourceNode) {
+                  if (sourceNode.type === 'textNode') sourceHandle = 'textOutput';
+                  else if (sourceNode.type === 'imageNode') sourceHandle = 'imageOutput';
+                  else if (sourceNode.type === 'videoNode') sourceHandle = 'videoOutput';
+                  else if (sourceNode.type === 'audioNode') sourceHandle = 'audioOutput';
+                  else if (sourceNode.type === 'concatNode') sourceHandle = 'concatOutput';
+                }
+                
+                if ((!targetHandle || targetHandle === 'prompt') && targetNode) {
+                  if (targetNode.type === 'textNode') targetHandle = 'textInput';
+                  else if (targetNode.type === 'imageNode') targetHandle = 'imageInput';
+                  else if (targetNode.type === 'videoNode') targetHandle = 'videoInput';
+                  else if (targetNode.type === 'audioNode') targetHandle = 'audioInput2';
+                  else if (targetNode.type === 'concatNode') targetHandle = 'concatInput';
+                }
+
+                let edgeColor = getEdgeColor(sourceHandle, targetHandle, sourceNode, targetNode);
+
+                return {
+                  id: `e-${source}-${target}`,
+                  source,
+                  target,
+                  sourceHandle,
+                  targetHandle,
+                  style: edgeStyles[edgeColor],
+                };
+              });
+
+              setEdges(newEdges);
+            }
+          }
+          setIsChatLoading(false);
+        } else if (status === "failed") {
+          clearInterval(interval);
+          throw new Error("Architect processing failed");
+        }
+      } catch (error) {
+        clearInterval(interval);
+        console.error("Polling error:", error);
+        const errorMessage = {
+          role: "agent",
+          content: "Sorry, I encountered an error while updating your workflow.",
+          timestamp: new Date().toISOString()
+        };
+        setChatMessages((prev) => [...prev, errorMessage]);
+        setIsChatLoading(false);
+      }
+    }, 3000);
+  };
+
+  const handleSendMessage = async (content) => {
+    const newMessage = { 
+      role: "user", 
+      content,
+      timestamp: new Date().toISOString()
+    };
+    setChatMessages((prev) => [...prev, newMessage]);
+    
+    setIsChatLoading(true);
+    try {
+      const savedWorkflowId = await handleSaveWorkFlow();
+      
+      const history = chatMessages.map(msg => ({
+        role: msg.role === "agent" ? "assistant" : msg.role,
+        content: msg.content
+      }));
+
+      const response = await axios.post("/api/workflow/architect", {
+        prompt: content,
+        workflow_id: savedWorkflowId,
+        history: history,
+      });
+      
+      const { request_id, status } = response.data;
+      pollArchitectStatus(request_id);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      const errorMessage = {
+        role: "agent",
+        content: "Sorry, I encountered an error processing your request.",
+        timestamp: new Date().toISOString()
+      };
+      setChatMessages((prev) => [...prev, errorMessage]);
+      setIsChatLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    onConnectRef.current = onConnect;
+  }, [onConnect]);
+
   const onEdgeClick = (event, edge) => {
     event.stopPropagation();
     setEdges((eds) => {
@@ -607,7 +824,7 @@ const NodeFlow = () => {
       const model = node.data?.selectedModel?.id ? node.data?.selectedModel?.id : category === "utility" ? "prompt-concatenator": `${category}-passthrough`;
       const modelSchema = nodeSchemas?.categories?.[category]?.models?.[model]?.input_schema?.schemas?.input_data;
       const inputSchema = modelSchema?.properties || {};
-      const wavespeedSchema = nodeSchemas?.categories?.api?.models?.wavespeed?.input_schema;
+      const wavespeedSchema = nodeSchemas?.categories?.api?.models?.[model]?.input_schema;
       const concatSchema = nodeSchemas?.categories?.utility?.models?.["prompt-concatenator"]?.input_schema;
       
       let dynamicPrompt = "";
@@ -680,6 +897,7 @@ const NodeFlow = () => {
         prompt: dynamicPrompt ? dynamicPrompt: node.data?.formValues?.prompt,
         images_list: dynamicImagesList,
         images: dynamicImagesList,
+        image_urls: dynamicImagesList,
         image_url: dynamicImageUrl,
         video_url: dynamicVideoUrl,
         audio_url: dynamicAudioUrl,
@@ -688,9 +906,22 @@ const NodeFlow = () => {
       };
 
       if (node.type === "apiNode") {
+        const listFields = ["images", "image_urls", "images_list"];
         connectedEdges.forEach((edge) => {
           if (edge.target === node.id) {
-            localSources[edge.targetHandle] = `{{ ${edge.source}.outputs[0].value }}`;
+            const val = `{{ ${edge.source}.outputs[0].value }}`;
+            const isList = listFields.includes(edge.targetHandle) || wavespeedSchema?.[edge.targetHandle]?.type === "array";
+            
+            if (isList) {
+              if (!Array.isArray(localSources[edge.targetHandle])) {
+                localSources[edge.targetHandle] = [];
+              }
+              if (!localSources[edge.targetHandle].includes(val)) {
+                localSources[edge.targetHandle].push(val);
+              }
+            } else {
+              localSources[edge.targetHandle] = val;
+            }
           }
         });
       }
@@ -710,7 +941,7 @@ const NodeFlow = () => {
 
         const filteredInputParams = Object.fromEntries(
           Object.entries(input_params).filter(([key]) =>
-            key !== "model_url" && key !== "api_key"
+            key !== "model_url" && key !== "api_key" && key !== "model_name" && key !== "model_type"
           )
         );
         
@@ -1094,15 +1325,25 @@ const NodeFlow = () => {
       nodeSchemas,
       onDataChange,
       handleSaveWorkFlow,
-      isLoading: loadingNodes[node.id] || false, 
+      isLoading: loadingNodes[node.id] || false,
       activeHandleColor,
       triggerRun: node.data.triggerRun || false,
       triggerInputs: node.data.triggerInputs || false,
       runNodeFromFlow,
       runNodeInputsFromFlow,
       handleTypes: {
-        ...(node.type === 'apiNode' ? Object.keys(node.data?.formValues || {}).reduce((acc, key) => ({...acc, [key]: 'blue'}), {}) : {}),
-        apiInput: "blue", apiInput2: "green", apiInput3: "green", apiOutput: "green",
+        ...(node.type === 'apiNode' ? Object.keys(node.data?.formValues || {}).reduce((acc, key) => ({...acc, [key]: 'white'}), {}) : {}),
+        concatInput: "blue", concatOutput: "blue",
+        apiInput: "blue", apiInput2: "green", apiInput3: "green",
+        apiOutput: (() => {
+          if (node.type !== 'apiNode') return "green";
+          const output = node.data?.outputs?.[0];
+          const modelType = node.data?.formValues?.model_type;
+          if (output?.type === 'text' || modelType === 'chat') return "blue";
+          if (output?.type === 'video_url' || modelType === 'video') return "orange";
+          if (output?.type === 'audio_url' || modelType === 'audio') return "yellow";
+          return "green";
+        })(),
         textInput: "blue", textInput2: "green", textInput3: "green", textOutput: "blue",
         imageInput: "blue", imageInput2: "green", imageInput3: "green", imageOutput: "green",
         videoInput: "blue", videoInput2: "green", videoInput3: "green", videoInput4: "orange", videoInput5: "yellow", videoInput6: "green", videoOutput: "orange",
@@ -1123,7 +1364,7 @@ const NodeFlow = () => {
     const sourceType = sourceNode?.data?.handleTypes?.[sourceHandle];
     const targetType = targetNode?.data?.handleTypes?.[targetHandle];
 
-    if (!sourceType || !targetType || sourceType !== targetType) return false;
+    if (!sourceType || !targetType || (sourceType !== targetType && targetType !== 'white')) return false;
 
     const isSourceOutput = sourceHandle.toLowerCase().includes("output");
     const isTargetInput = targetHandle.toLowerCase().includes("input") || (targetNode.type === "apiNode" && targetHandle !== "apiOutput");
@@ -1322,7 +1563,7 @@ const NodeFlow = () => {
     if (connection) {
       setTimeout(() => {
         connectionMadeRef.current = false;
-        onConnect(connection);
+        onConnectRef.current(connection);
       }, 100);
     }
     
@@ -1489,13 +1730,20 @@ const NodeFlow = () => {
   }, [selectedNode, setNodes]);
 
   const getModelsForNode = (node) => {
-    if (!node) return [];
+    if (!node || !nodeSchemas?.categories) return [];
 
-    if (node.type === "textNode") return textModels;
-    if (node.type === "imageNode") return imageModels;
-    if (node.type === "videoNode") return videoModels;
-    if (node.type === "audioNode") return audioModels;
-    if (node.type === "apiNode") return apiNodeModels;
+    const mapModels = (modelsMap) => 
+      modelsMap ? Object.entries(modelsMap).map(([id, model]) => ({
+        ...model,
+        id,
+        name: SPECIAL_MODEL_NAMES[id] || formatName(id)
+      })) : [];
+
+    if (node.type === "textNode") return mapModels(nodeSchemas.categories.text?.models);
+    if (node.type === "imageNode") return mapModels(nodeSchemas.categories.image?.models);
+    if (node.type === "videoNode") return mapModels(nodeSchemas.categories.video?.models);
+    if (node.type === "audioNode") return mapModels(nodeSchemas.categories.audio?.models);
+    if (node.type === "apiNode") return filteredApiNodeModels;
     return [];
   };
 
@@ -1531,6 +1779,12 @@ const NodeFlow = () => {
 
   return (
     <div tabIndex={0} onKeyDown={onKeyDown} className="flex h-screen w-screen relative">
+      {isRestoring && (
+        <div className="fixed inset-0 flex items-center justify-center gap-2 bg-black w-full h-full z-20">
+          <div className="w-6 h-6 rounded-full border-[4px] border-white border-t-transparent animate-spin"></div>
+          <div className="text-white text-xl font-bold">Loading...</div>
+        </div>
+      )}
       <div className="flex items-center justify-center absolute top-0 z-20 bg-[#151618] w-full py-3 border-b border-gray-800">
         <div className="flex items-center justify-between w-full max-w-[95%] sm:max-w-[90%] lg:max-w-[80%]">
           <div className="flex items-center gap-2 w-[35%]">
@@ -1624,7 +1878,7 @@ const NodeFlow = () => {
           </div>
         </div>
       </div>
-      <div className="absolute left-4 self-center z-20 flex flex-col gap-2 bg-[#151618] p-1 rounded-full border border-gray-700 shadow-xl">
+      <div className={`absolute left-4 self-center z-20 flex flex-col gap-2 bg-[#151618] p-1 rounded-full border border-gray-700 shadow-xl ${isRestoring && "hidden"}`}>
         <button 
           type="button"
           onClick={() => toast.error("This workflow can't be edited.")} 
@@ -1654,7 +1908,7 @@ const NodeFlow = () => {
           </button>
           {dropDown === 1 && (
             <div className="absolute left-14 top-0 z-50">
-              <NodesNavbar addNode={addNode} />
+              <NodesNavbar addNode={addNode} apiNodeModels={filteredApiNodeModels} nodeSchemas={nodeSchemas} />
             </div>
           )}
         </div>
@@ -1748,6 +2002,7 @@ const NodeFlow = () => {
           multiSelectionKeyCode="Shift"
           connectionLineStyle={connectionLineStyle}
           fitView={() => fitView({ padding: 0.4, duration: 500, minZoom: 0.2 })}
+          proOptions={{ hideAttribution: true }}
         >
           <Background />
           {edgePicker && (() => {
@@ -1770,7 +2025,9 @@ const NodeFlow = () => {
                 >
                   <NodesNavbar 
                     addNode={handleSelectNodeFromEdgePicker}
+                    apiNodeModels={filteredApiNodeModels}
                     filterNodeTypes={compatibleTypes}
+                    nodeSchemas={nodeSchemas}
                   />
                 </div>
               </>
@@ -1882,61 +2139,83 @@ const NodeFlow = () => {
                             <>Fetch Model</>
                           )}
                         </button>
-                        {Object.entries(selectedNode?.data?.taskData || {}).map(([key, meta], idx) =>
-                          <RenderApiField 
-                            key={key} 
-                            fieldName={key}
-                            meta={meta} 
-                            idx={idx} 
-                            formValues={selectedNode?.data?.formValues || {}}
-                            setFormValues={(newValues) => {
-                              setNodes((nds) =>
-                                nds.map((node) => {
-                                  if (node.id === selectedNode?.id) {
-                                    return {
-                                      ...node,
-                                      data: {
-                                        ...node.data,
-                                        formValues: typeof newValues === 'function' 
-                                          ? newValues(node.data?.formValues || {})
-                                          : newValues,
-                                      },
-                                    };
-                                  }
-                                  return node;
-                                })
-                              );
-                            }}
-                            exposedHandles={selectedNode?.data?.exposedHandles || []}
-                            onToggleHandle={(field) => {
-                              const current = selectedNode?.data?.exposedHandles || [];
-                              const isRemoving = current.includes(field);
-                              
-                              if (isRemoving) {
-                                setEdges((eds) => eds.filter(e => !(e.target === selectedNode?.id && e.targetHandle === field)));
-                              }
+                        {Object.entries(selectedNode?.data?.taskData || {}).map(([key, meta], idx) => {
+                          const hardcodedKeys = Object.keys(selectedNode?.data?.selectedModel?.input_params?.properties || {});
+                          const isHardcoded = hardcodedKeys.includes(key);
 
-                              setNodes((nds) =>
-                                nds.map((node) => {
-                                  if (node.id === selectedNode?.id) {
-                                    const updated = isRemoving
-                                      ? current.filter(h => h !== field)
-                                      : [...current, field];
-                                    return {
-                                      ...node,
-                                      data: {
-                                        ...node.data,
-                                        exposedHandles: updated,
-                                      },
-                                    };
+                          return (
+                            <RenderApiField 
+                              key={key} 
+                              fieldName={key}
+                              meta={meta} 
+                              idx={idx} 
+                              formValues={selectedNode?.data?.formValues || {}}
+                              setFormValues={(newValues) => {
+                                setNodes((nds) =>
+                                  nds.map((node) => {
+                                    if (node.id === selectedNode?.id) {
+                                      let updatedFormValues = typeof newValues === 'function' 
+                                        ? newValues(node.data?.formValues || {})
+                                        : newValues;
+
+                                      if (key === 'model_name' && node.data.dynamicSchemas) {
+                                        const modelNameValue = updatedFormValues.model_name;
+                                        const matchedModel = Object.values(node.data.dynamicSchemas).find(m => m.model_id === modelNameValue);
+                                        if (matchedModel && matchedModel.model_type) {
+                                          updatedFormValues = { ...updatedFormValues, model_type: matchedModel.model_type };
+                                        }
+                                      }
+
+                                      return {
+                                        ...node,
+                                        data: {
+                                          ...node.data,
+                                          formValues: updatedFormValues,
+                                        },
+                                      };
+                                    }
+                                    return node;
+                                  })
+                                );
+                              }}
+                              exposedHandles={selectedNode?.data?.exposedHandles || []}
+                              onToggleHandle={isHardcoded ? null : (field) => {
+                                const current = selectedNode?.data?.exposedHandles || [];
+                                const isRemoving = current.includes(field);
+                                if (isRemoving) {
+                                  setEdges((eds) => eds.filter(e => !(e.target === selectedNode?.id && e.targetHandle === field)));
+                                }
+                                setNodes((nds) =>
+                                  nds.map((node) => {
+                                    if (node.id === selectedNode?.id) {
+                                      const updated = isRemoving
+                                        ? current.filter(h => h !== field)
+                                        : [...current, field];
+                                      return {
+                                        ...node,
+                                        data: {
+                                          ...node.data,
+                                          exposedHandles: updated,
+                                        },
+                                      };
+                                    }
+                                    return node;
+                                  })
+                                );
+                              }}
+                              handleChange={(field, value) => {
+                                updateNodeFromPanel(field, value);
+
+                                if (field === 'model_name' && selectedNode.data.dynamicSchemas) {
+                                  const matchedModel = Object.values(selectedNode.data.dynamicSchemas).find(m => m.model_id === value);
+                                  if (matchedModel && matchedModel.model_type) {
+                                    updateNodeFromPanel('model_type', matchedModel.model_type);
                                   }
-                                  return node;
-                                })
-                              );
-                            }}
-                            handleChange={updateNodeFromPanel}
-                          />
-                        )}
+                                }
+                              }}
+                            />
+                          );
+                        })}
                       </div>
                     ) : Object.keys(inputSchema).length > 0 ? (
                       Object.entries(inputSchema?.properties).map(([key, meta], idx) => (
@@ -2008,7 +2287,11 @@ const NodeFlow = () => {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <NodesNavbar addNode={(type, _, data) => addNode(type, contextMenu.position, data)} />
+          <NodesNavbar 
+            addNode={(type, _, data) => addNode(type, contextMenu.position, data)} 
+            apiNodeModels={filteredApiNodeModels}
+            nodeSchemas={nodeSchemas}
+          />
         </div>
       )}
       <div 
@@ -2106,6 +2389,16 @@ const NodeFlow = () => {
             </button>
           </div>
         </div>
+      )}
+      {interactionMode && (
+        <ChatWidget 
+          isOpen={isChatOpen} 
+          toggleChat={() => setIsChatOpen(!isChatOpen)} 
+          messages={chatMessages} 
+          onSendMessage={handleSendMessage} 
+          isLoading={isChatLoading}
+          onClearHistory={() => setChatMessages([])}
+        />
       )}
       <ToastContainer />
     </div>

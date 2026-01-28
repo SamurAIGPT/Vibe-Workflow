@@ -40,7 +40,13 @@ const outputHandles = [
 ];
 
 const VideoGeneration = ({ id, data, selected }) => {
-  const [selectedModel, setSelectedModel] = useState(data.selectedModel || videoModels[1]);
+  const models = useMemo(() => {
+    return data.nodeSchemas?.categories?.video?.models 
+      ? Object.values(data.nodeSchemas.categories.video.models) 
+      : [];
+  }, [data.nodeSchemas]);
+  
+  const [selectedModel, setSelectedModel] = useState(data.selectedModel || models[1] || models[0] || {});
   const [connectedInputs, setConnectedInputs] = useState({});
   const [connectedOutputs, setConnectedOutputs] = useState({});
   const [formValues, setFormValues] = useState(data.formValues || {});
@@ -52,7 +58,7 @@ const VideoGeneration = ({ id, data, selected }) => {
   const { setNodes, setEdges } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const edges = useStore((state) => state.edges);
-  const properties = nodeSchemas?.categories?.video.models[selectedModel.id]?.input_schema?.schemas?.input_data?.properties;
+  const properties = nodeSchemas?.categories?.video?.models?.[selectedModel.id]?.input_schema?.schemas?.input_data?.properties;
   
   const initializeFormData = (schemaProperties) => {
     const initialData = {};

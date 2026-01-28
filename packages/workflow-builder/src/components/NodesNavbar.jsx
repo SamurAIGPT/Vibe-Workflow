@@ -10,24 +10,33 @@ import {
   videoModels,
   textModels,
   audioModels,
-  apiNodeModels,
   concatModels
 } from "./utility";
 import { TbArrowMerge } from "react-icons/tb";
 import { RiInputMethodLine } from "react-icons/ri";
+import { LuUpload } from "react-icons/lu";
 
-const NodesNavbar = ({ addNode, filterNodeTypes = null }) => {
+const formatName = (id) => id.replace(/-/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+const SPECIAL_MODEL_NAMES = {
+  "text-passthrough": "Input Text",
+  "image-passthrough": "Input Image",
+  "video-passthrough": "Input Video",
+  "audio-passthrough": "Input Audio",
+};
+
+const NodesNavbar = ({ addNode, apiNodeModels, filterNodeTypes = null, nodeSchemas = {} }) => {
   const [activeSubMenu, setActiveSubMenu] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const menuRef = useRef(null);
 
   const getNodeTypeFromSubmenuId = (id) => {
+    if (id === 'inputs') return ['textNode', 'imageNode', 'videoNode', 'audioNode'];
     if (id.includes('text-llms') || id === 'text-llms') return 'textNode';
     if (id.includes('concat') || id === 'text-utils') return 'concatNode';
     if (id.includes('image')) return 'imageNode';
     if (id.includes('video')) return 'videoNode';
     if (id.includes('audio')) return 'audioNode';
-    if (id === 'essentials') return 'apiNode';
+    if (id === 'api-models') return 'apiNode';
     return null;
   };
 
@@ -47,22 +56,50 @@ const NodesNavbar = ({ addNode, filterNodeTypes = null }) => {
   const hasSearch = searchQuery.trim().length > 0;
 
   const getCategorizedModels = () => {
-    const generateImageModels = imageModels.filter(m => !m.id.includes("edit") && !m.id.includes("reference") && !m.id.includes("image-to-image"));
-    const editImageModels = imageModels.filter(m => m.id.includes("edit") || m.id.includes("reference") || m.id.includes("image-to-image"));
-    const upscaleImageModels = imageModels.filter(m => m.id.includes("upscale"));
-    const generateVideoModels = videoModels.filter(m => !m.id.includes("edit"));
-    const editVideoModels = videoModels.filter(m => m.id.includes("edit"));
+    const categories = nodeSchemas?.categories || {};
+    
+    const mapModels = (modelsMap) => 
+      modelsMap ? Object.entries(modelsMap).map(([id, model]) => ({
+        ...model,
+        id,
+        name: SPECIAL_MODEL_NAMES[id] || formatName(id)
+      })) : [];
+
+    const imageModels = mapModels(categories.image?.models);
+    const videoModels = mapModels(categories.video?.models);
+    const textModels = mapModels(categories.text?.models);
+    const audioModels = mapModels(categories.audio?.models);
+    const apiModels = mapModels(categories.api?.models);
+    const utilityModels = mapModels(categories.utility?.models);
+
+    const isPassthrough = (m) => m?.id && m.id.includes("passthrough");
+
+    const inputsModels = [
+      ...textModels.filter(isPassthrough).map(m => ({ ...m, type: 'textNode' })),
+      ...imageModels.filter(isPassthrough).map(m => ({ ...m, type: 'imageNode' })),
+      ...videoModels.filter(isPassthrough).map(m => ({ ...m, type: 'videoNode' })),
+      ...audioModels.filter(isPassthrough).map(m => ({ ...m, type: 'audioNode' })),
+    ];
+
+    const generateImageModels = imageModels.filter(m => m?.id && !isPassthrough(m) && !m.id.includes("edit") && !m.id.includes("reference") && !m.id.includes("image-to-image"));
+    const editImageModels = imageModels.filter(m => m?.id && !isPassthrough(m) && (m.id.includes("edit") || m.id.includes("reference") || m.id.includes("image-to-image")));
+    const upscaleImageModels = imageModels.filter(m => m?.id && !isPassthrough(m) && m.id.includes("upscale"));
+    const generateVideoModels = videoModels.filter(m => m?.id && !isPassthrough(m) && !m.id.includes("edit"));
+    const editVideoModels = videoModels.filter(m => m?.id && !isPassthrough(m) && m.id.includes("edit"));
+    const textModelsFiltered = textModels.filter(m => !isPassthrough(m));
+    const audioModelsFiltered = audioModels.filter(m => !isPassthrough(m));
 
     return {
+      inputs: inputsModels,
       generateImage: generateImageModels,
       editImage: editImageModels,
       upscaleImage: upscaleImageModels,
       generateVideo: generateVideoModels,
       editVideo: editVideoModels,
-      audio: audioModels,
-      text: textModels,
-      textUtils: concatModels,
-      utilities: concatModels,
+      audio: audioModelsFiltered,
+      text: textModelsFiltered,
+      textUtils: utilityModels,
+      utilities: utilityModels,
       api: apiNodeModels,
     };
   };
@@ -76,6 +113,12 @@ const NodesNavbar = ({ addNode, filterNodeTypes = null }) => {
   };
 
   const menuStructure = [
+    {
+      label: "Inputs",
+      items: [
+        { label: "Input Models", icon: <LuUpload />, hasSubmenu: true, id: "inputs" },
+      ]
+    },
     {
       label: "Text",
       items: [
@@ -106,15 +149,16 @@ const NodesNavbar = ({ addNode, filterNodeTypes = null }) => {
       ]
     },
     {
-      label: "Essentials",
+      label: "API Models",
       items: [
-        { label: "Api Node", icon: <RiInputMethodLine />, hasSubmenu: true, id: "essentials" },
+        { label: "Api Node", icon: <RiInputMethodLine />, hasSubmenu: true, id: "api-models" },
       ]
     }
   ];
 
   const getSubmenuItems = (id) => {
     switch (id) {
+      case "inputs": return categorizedModels.inputs.map(m => ({ label: m.name, model: m, type: m.type }));
       case "text-utils": return categorizedModels.textUtils.map(m => ({ label: m.name, model: m, type: "concatNode" }));
       case "generate-image": return categorizedModels.generateImage.map(m => ({ label: m.name, model: m, type: "imageNode" }));
       case "edit-image": return categorizedModels.editImage.map(m => ({ label: m.name, model: m, type: "imageNode" }));
@@ -123,24 +167,33 @@ const NodesNavbar = ({ addNode, filterNodeTypes = null }) => {
       case "generate-video": return categorizedModels.generateVideo.map(m => ({ label: m.name, model: m, type: "videoNode" }));
       case "edit-video": return categorizedModels.editVideo.map(m => ({ label: m.name, model: m, type: "videoNode" }));
       case "generate-audio": return categorizedModels.audio.map(m => ({ label: m.name, model: m, type: "audioNode" }));
-      case "essentials": return [
-        { label: "Api Node", model: apiNodeModels[0], type: "apiNode" },
-      ];
+      case "api-models": return categorizedModels.api.map(m => ({ label: m.name, model: m, type: "apiNode" }));
       default: return [];
     }
   };
 
   const renderSearchResults = () => {
+    const { 
+      inputs,
+      generateImage, editImage, upscaleImage, 
+      generateVideo, editVideo, 
+      text, audio, textUtils, api 
+    } = categorizedModels;
+
     const allModels = [
-      ...imageModels.map(m => ({ ...m, type: "imageNode" })),
-      ...videoModels.map(m => ({ ...m, type: "videoNode" })),
-      ...textModels.map(m => ({ ...m, type: "textNode" })),
-      ...audioModels.map(m => ({ ...m, type: "audioNode" })),
-      ...concatModels.map(m => ({ ...m, type: "concatNode" })),
+      ...inputs.map(m => ({ ...m, type: m.type })),
+      ...generateImage.map(m => ({ ...m, type: "imageNode" })),
+      ...editImage.map(m => ({ ...m, type: "imageNode" })),
+      ...upscaleImage.map(m => ({ ...m, type: "imageNode" })),
+      ...generateVideo.map(m => ({ ...m, type: "videoNode" })),
+      ...editVideo.map(m => ({ ...m, type: "videoNode" })),
+      ...text.map(m => ({ ...m, type: "textNode" })),
+      ...audio.map(m => ({ ...m, type: "audioNode" })),
+      ...textUtils.map(m => ({ ...m, type: "concatNode" })),
       ...apiNodeModels.map(m => ({ ...m, type: "apiNode" })),
     ];
 
-    const filtered = allModels.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filtered = allModels.filter(m => m && m.name && m.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
     return (
       <div className="flex flex-col gap-1 w-full max-h-96 overflow-y-auto">
@@ -214,6 +267,9 @@ const NodesNavbar = ({ addNode, filterNodeTypes = null }) => {
         ...section,
         items: section.items.filter(item => {
           const nodeType = getNodeTypeFromSubmenuId(item.id);
+          if (Array.isArray(nodeType)) {
+            return nodeType.some(type => filterNodeTypes.includes(type));
+          }
           return filterNodeTypes.includes(nodeType);
         })
       })).filter(section => section.items.length > 0)
@@ -239,7 +295,7 @@ const NodesNavbar = ({ addNode, filterNodeTypes = null }) => {
 
         {!hasSearch ? (
           <div className="flex flex-col gap-3 overflow-y-auto custom-scrollbar min-h-0">
-            {menuStructure.map((section, idx) => (
+            {filteredMenuStructure.map((section, idx) => (
               <div key={idx} className="flex flex-col gap-1">
                 <h3 className="text-[10px] text-gray-500 text-left px-2 font-medium sticky top-0 bg-[#151618] z-10">{section.label}</h3>
                 <div className="flex flex-col gap-0.5">
@@ -338,6 +394,8 @@ const Submenu = ({ activeSubMenu, menuStructure, getSubmenuItems, handleAddNode,
 
   const getLabelIcon = (label) => {
     switch (label) {
+      case "Input Models":
+        return <LuUpload />;
       case "Text (LLMs)":
         return <TfiText />;
       case "Text Utilities":

@@ -126,7 +126,7 @@ const RenderField = ({ fieldName, meta, idx, formValues, setFormValues, handleCh
     })
   };
 
-  const isInputModel = ["Input Text", "Input Image", "Input Audio", "Input Video"].includes(modelName);
+  const isInputModel = modelName.includes("passthrough");
   if (isInputModel && meta.type !== "boolean") return null;
 
   if (meta.enum) {

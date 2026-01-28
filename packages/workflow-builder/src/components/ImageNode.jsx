@@ -38,7 +38,13 @@ const outputHandles = [
 ];
 
 const ImageGeneration = ({ id, data, selected }) => {
-  const [selectedModel, setSelectedModel] = useState(data.selectedModel || imageModels[1]);
+  const models = useMemo(() => {
+    return data.nodeSchemas?.categories?.image?.models 
+      ? Object.values(data.nodeSchemas.categories.image.models) 
+      : [];
+  }, [data.nodeSchemas]);
+  
+  const [selectedModel, setSelectedModel] = useState(data.selectedModel || models[1] || models[0] || {});
   const [connectedInputs, setConnectedInputs] = useState({});
   const [connectedOutputs, setConnectedOutputs] = useState({});
   const [formValues, setFormValues] = useState(data.formValues || {});
@@ -50,7 +56,7 @@ const ImageGeneration = ({ id, data, selected }) => {
   const { setNodes, setEdges } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const edges = useStore((state) => state.edges);
-  const properties = nodeSchemas?.categories?.image.models[selectedModel.id]?.input_schema?.schemas?.input_data?.properties;
+  const properties = nodeSchemas?.categories?.image?.models?.[selectedModel.id]?.input_schema?.schemas?.input_data?.properties;
   
   const initializeFormData = (schemaProperties) => {
     const initialData = {};

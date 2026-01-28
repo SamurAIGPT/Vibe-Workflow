@@ -16,7 +16,7 @@ const outputHandles = [
 ];
 
 const PromptConcate = ({ id, data, selected }) => {  
-  const [selectedModel, setSelectedModel] = useState(data.selectedModel || concatModels[0]);
+  const [selectedModel, setSelectedModel] = useState(concatModels[0]);
   const [connectedInputs, setConnectedInputs] = useState({});
   const [connectedOutputs, setConnectedOutputs] = useState({});
   const [formValues, setFormValues] = useState({});
@@ -27,6 +27,7 @@ const PromptConcate = ({ id, data, selected }) => {
   const { setNodes, setEdges } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const edges = useStore((state) => state.edges);
+  const properties = selectedModel?.input_params?.properties || {};
 
   const initializeFormData = (schemaProperties) => {
     const initialData = {};
@@ -74,7 +75,6 @@ const PromptConcate = ({ id, data, selected }) => {
   };
   
   useEffect(() => {
-    const properties = selectedModel?.input_params?.properties || {};
     const defaults = initializeFormData(properties);
 
     const validKeys = Object.keys(properties);
@@ -97,12 +97,6 @@ const PromptConcate = ({ id, data, selected }) => {
     );
     setFormValues(merged);
   }, [selectedModel]);
-
-  useEffect(() => {
-    if (data.selectedModel) {
-      setSelectedModel(data.selectedModel);
-    }
-  }, [data.selectedModel]);
 
   useEffect(() => {
     updateNodeInternals(id);
@@ -136,9 +130,7 @@ const PromptConcate = ({ id, data, selected }) => {
     };
   };
 
-  const hasPrompt = "prompt" in formValues;
-  const hasImagesList = "images_list" in formValues;
-  const hasImageUrl = "image_url" in formValues;
+  const hasPrompt = properties && "prompt" in properties;
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -154,7 +146,7 @@ const PromptConcate = ({ id, data, selected }) => {
       );
     }, 2000);
     return () => clearTimeout(timeout);
-  }, [hasPrompt, hasImageUrl, id, setEdges]);
+  }, [hasPrompt, id, setEdges]);
 
   useEffect(() => {
     const connectedInputs = {};
