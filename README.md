@@ -33,9 +33,12 @@ Vibe-Workflow/
 
 ### Prerequisites
 
-- **Node.js** (v18+)
-- **Python** (v3.8+)
+For local development:
+- **Node.js** (v20+)
+- **Python** (v3.10+)
 - **npm** (v7+ for workspaces support)
+
+Or use **Docker** (see [Running with Docker](#running-with-docker)).
 
 ### Installation
 
@@ -90,9 +93,52 @@ source venv/bin/activate  # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
 
 # Run the server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 *The API will be available at [http://localhost:8000](http://localhost:8000)*
+
+## Running with Docker
+
+The easiest way to run Vibe Workflow is with Docker Compose.
+
+### Prerequisites
+
+- **Docker** (v20+)
+- **Docker Compose** (v2+)
+
+### Quick Start
+
+1. **Configure environment**:
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` and add your MuAPI key:
+   ```bash
+   MU_API_KEY=your_actual_api_key_here
+   ```
+
+2. **Start all services**:
+   ```bash
+   docker compose up --build
+   ```
+
+3. **Access the application**:
+   - Frontend: [http://localhost:3000](http://localhost:3000)
+   - Backend API: [http://localhost:8000](http://localhost:8000)
+   - API Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### Services
+
+| Service | Image | Port |
+|---------|-------|------|
+| client | Node.js 24 Alpine | 3000 |
+| server | Python 3.13 | 8000 |
+
+### Stopping
+
+```bash
+docker compose down
+```
 
 ## Development
 
