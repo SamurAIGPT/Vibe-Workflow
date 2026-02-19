@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Handle, Position, useReactFlow, useStore, useUpdateNodeInternals } from "reactflow";
 import { BsArrowUpCircleFill } from "react-icons/bs";
 import { textModels } from "./utility";
@@ -20,7 +20,12 @@ const outputHandles = [
 ];
 
 const TextGeneration = ({ id, data, selected }) => {
-  const [selectedModel, setSelectedModel] = useState(data.selectedModel || textModels[1]);
+  const models = useMemo(() => {
+    return data.nodeSchemas?.categories?.text?.models 
+      ? Object.values(data.nodeSchemas.categories.text.models) 
+      : [];
+  }, [data.nodeSchemas]);
+  const [selectedModel, setSelectedModel] = useState(data.selectedModel || models[1] || models[0] || {});
   const [connectedInputs, setConnectedInputs] = useState({});
   const [connectedOutputs, setConnectedOutputs] = useState({});
   const [formValues, setFormValues] = useState(data.formValues || {});
@@ -32,8 +37,19 @@ const TextGeneration = ({ id, data, selected }) => {
   const { setNodes, setEdges } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const edges = useStore((state) => state.edges);
-  const properties = nodeSchemas?.categories?.text.models[selectedModel.id]?.input_schema?.schemas?.input_data?.properties;
+  const properties = nodeSchemas?.categories?.text?.models?.[selectedModel.id]?.input_schema?.schemas?.input_data?.properties;
   
+  const textareaRef = useRef(null);
+  
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      const parentHeight = textarea.parentElement ? textarea.parentElement.clientHeight : 0;
+      textarea.style.height = `${Math.max(textarea.scrollHeight, parentHeight)}px`;
+    }
+  }, [data.resultUrl]);
+
   const initializeFormData = (schemaProperties) => {
     const initialData = {};
     const fieldEntries = Object.entries(schemaProperties || {});
@@ -314,7 +330,7 @@ const TextGeneration = ({ id, data, selected }) => {
           <UploadNode id={id} data={data} formValues={formValues} setFormValues={setFormValues} selectedModel={selectedModel} loading={loading} uploadType="text" acceptType="text" />
         </div>
       ) : (
-        <div className="flex items-center justify-center flex-1 w-full h-full overflow-hidden p-2">
+        <div className="flex items-center justify-center flex-1 w-full h-full p-2">
           {data.isLoading ? (
             <div className="flex flex-col gap-2 w-full h-full overflow-hidden">
               <div className="skeleton h-[10px] w-full"></div>
@@ -335,9 +351,10 @@ const TextGeneration = ({ id, data, selected }) => {
             </div>
           ) : data.resultUrl && !data.isLoading ? ( 
             <textarea
+              ref={textareaRef}
               readOnly
               value={data.resultUrl}
-              className="w-full h-full text-xs outline-none bg-transparent resize-none text-white"
+              className="w-full max-h-96 text-xs outline-none bg-transparent resize-none text-white overflow-y-auto custom-scrollbar"
             />
           ) : (
             <p className="text-gray-400 text-sm italic">Generation results appeared here...</p>

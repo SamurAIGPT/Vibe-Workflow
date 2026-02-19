@@ -1,8 +1,8 @@
 # Vibe Workflow — Open-Source Alternative to Weavy AI, Freepik Spaces, Krea Nodes & FloraFauna AI
 
-**Vibe Workflow** is a free, open-source node-based AI workflow builder — the self-hostable alternative to [Weavy.ai](https://weavy.ai), [Freepik Spaces](https://freepik.com), [Krea Nodes](https://krea.ai), and [FloraFauna AI](https://florafauna.ai). Designed around "Artistic Intelligence," it gives creators and developers a visual, modular pipeline editor for designing, editing, and composing AI-generated images and video — with no vendor lock-in.
+**Vibe Workflow** is a free, open-source node-based AI workflow builder — the self-hostable alternative to [Weavy.ai](https://weavy.ai), [Freepik Spaces](https://freepik.com), [Krea Nodes](https://krea.ai), and [FloraFauna AI](https://florafauna.ai). Designed around "Artistic Intelligence," it gives creators and developers a visual, modular pipeline editor for designing, editing, and composing AI-generated images and video — with no vendor lock-in. Read the full story: [I built Open Weavy because paid AI creative tools were getting ridiculously expensive](https://medium.com/@anilmatcha/i-built-open-weavy-because-paid-ai-creative-tools-were-getting-ridiculously-expensive-f67b088e06fb).
 
-<img width="1536" height="1024" alt="Vibe Workflow — open-source AI workflow builder alternative to Weavy AI, Krea Nodes, Freepik Spaces, FloraFauna AI" src="https://github.com/user-attachments/assets/a11ff6c1-83bf-4c09-ac58-03ccffffd84c" />
+<img width="1024" height="1024" alt="Vibe Workflow — open-source AI workflow builder alternative to Weavy AI, Krea Nodes, Freepik Spaces, FloraFauna AI" src="https://github.com/user-attachments/assets/f603eb13-3b4f-4c9a-9a6a-c4cc3a94f7a6" />
 
 > **Looking for a Weavy AI alternative? A Krea Nodes alternative? A Freepik Spaces alternative? A FloraFauna AI alternative?**
 > Vibe Workflow is fully open-source, self-hostable, and free — with the same node-based visual editor you know and love.
@@ -20,7 +20,7 @@
 | No Subscription | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Extendable / API | ✅ | Limited | Limited | ❌ | Limited |
 
-Vibe Workflow bridges the gap between complex generative AI capabilities and intuitive visual design. Where tools like Weavy AI and Krea Nodes offer powerful node-based systems behind paywalls, Vibe Workflow gives you the same power — open-source, flexible, and extendable:
+Paid AI creative tools have become [ridiculously expensive](https://medium.com/@anilmatcha/i-built-open-weavy-because-paid-ai-creative-tools-were-getting-ridiculously-expensive-f67b088e06fb). Vibe Workflow bridges the gap between complex generative AI capabilities and intuitive visual design. Where tools like Weavy AI and Krea Nodes offer powerful node-based systems behind paywalls, Vibe Workflow gives you the same power — open-source, flexible, and extendable:
 
 - **Creative Professionals**: Build custom AI pipelines for high-volume asset production.
 - **Studios**: Maintain brand consistency across hundreds of generative variations.
@@ -66,9 +66,12 @@ Vibe-Workflow/
 
 ### Prerequisites
 
-- **Node.js** v18+
-- **Python** v3.8+
-- **npm** v7+ (workspaces support)
+For local development:
+- **Node.js** (v20+)
+- **Python** (v3.10+)
+- **npm** (v7+ for workspaces support)
+
+Or use **Docker** (see [Running with Docker](#running-with-docker)).
 
 ### Installation
 
@@ -112,8 +115,54 @@ cd server
 python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-# API available at http://localhost:8000
+
+# Run the server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+---
+
+## Running with Docker
+
+The easiest way to run Vibe Workflow is with Docker Compose.
+
+### Prerequisites
+
+- **Docker** (v20+)
+- **Docker Compose** (v2+)
+
+### Quick Start
+
+1. **Configure environment**:
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` and add your MuAPI key:
+   ```bash
+   MU_API_KEY=your_actual_api_key_here
+   ```
+
+2. **Start all services**:
+   ```bash
+   docker compose up --build
+   ```
+
+3. **Access the application**:
+   - Frontend: [http://localhost:3000](http://localhost:3000)
+   - Backend API: [http://localhost:8000](http://localhost:8000)
+   - API Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### Services
+
+| Service | Image | Port |
+|---------|-------|------|
+| client | Node.js 24 Alpine | 3000 |
+| server | Python 3.13 | 8000 |
+
+### Stopping
+
+```bash
+docker compose down
 ```
 
 ---

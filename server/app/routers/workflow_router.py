@@ -13,7 +13,10 @@ from app.utils.workflow_helper import (
     generate_thumbnail_helper,
     get_workflow_defs_helper,
     delete_workflow_def_by_id,
-    update_workflow_name_helper
+    update_workflow_name_helper,
+    get_workflow_last_run,
+    architect_workflow_helper,
+    poll_architect_result_helper
 )
 
 router = APIRouter()
@@ -135,4 +138,30 @@ async def generate_thumbnail(workflow_id: str, request: Request):
         return await generate_thumbnail_helper(workflow_id, payload)
     except Exception as e:
         if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/get-workflow-last-run/{workflow_id}")
+async def get_workflow_last_run_endpoint(
+    workflow_id: str,
+):
+    try:
+        return await get_workflow_last_run(workflow_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/architect")
+async def architect_workflow_endpoint(
+    request: Request,
+):
+    try:
+        payload = await request.json()
+        return await architect_workflow_helper(payload)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/poll-architect/{id}/result")
+async def poll_architect_result(id: str):
+    try:
+        return await poll_architect_result_helper(id)
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

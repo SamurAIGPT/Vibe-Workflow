@@ -14,11 +14,18 @@ const RenderApiField = ({ fieldName, meta, idx, formValues, setFormValues, handl
   const [dropDown, setDropDown] = useState(-1);
   const [uploading, setUploading] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState({});
-  const buttonRef = useRef(null);
+  const containerRef = useRef(null);
 
-  const isImageField = ['image', 'images_list'].includes(meta.field);
-  const isVideoField = meta.field === 'video';
-  const isAudioField = meta.field === 'audio';
+  const isImageUrl = (url) => {
+    if (typeof url !== 'string') return false;
+    return url.match(/\.(jpeg|jpg|gif|png|webp|avif|HEIC)(\?.*)?$/i) !== null || url.startsWith('https://cdn.muapi.ai/');
+  };
+
+  const isImageField = ['image', 'last_image', 'image_url'].includes(meta.field) || 
+                       ['image', 'last_image', 'image_url'].includes(fieldName);
+  const isImagesListField = ['images', 'image_urls', 'images_list'].includes(fieldName) || meta.field === 'images_list';
+  const isVideoField = ['video', 'video_url'].includes(meta.field) || ['video', 'video_url'].includes(fieldName);
+  const isAudioField = ['audio', 'audio_url'].includes(meta.field) || ['audio', 'audio_url'].includes(fieldName);
   const value = formValues[fieldName] ?? meta.default ?? "";
   const isRequired = meta.required || false;
   const label = (
@@ -31,7 +38,7 @@ const RenderApiField = ({ fieldName, meta, idx, formValues, setFormValues, handl
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleHandle(fieldName); }}
-          className={`p-1 rounded transition-colors opacity-0 group-hover/label:opacity-100 ${exposedHandles.includes(fieldName) ? "text-blue-500 opacity-100" : "text-gray-500 hover:text-white"}`}
+          className={`p-1 rounded transition-colors group-hover/label:opacity-100 ${exposedHandles.includes(fieldName) ? "text-blue-500 opacity-100" : "text-white opacity-100"}`}
           title={exposedHandles.includes(fieldName) ? "Remove input" : "Set as input"}
         >
           <TbExternalLink size={14} />
@@ -41,8 +48,8 @@ const RenderApiField = ({ fieldName, meta, idx, formValues, setFormValues, handl
   );
 
   useLayoutEffect(() => {
-    if (dropDown === idx + 1 && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
+    if (dropDown === idx + 1 && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
       const windowHeight = window.innerHeight;
       const spaceBelow = windowHeight - rect.bottom;
       const spaceAbove = rect.top;
@@ -146,6 +153,11 @@ const RenderApiField = ({ fieldName, meta, idx, formValues, setFormValues, handl
   };
 
   if (meta.enum) {
+    const isManual = meta.allowManual || false;
+    const filteredOptions = isManual && value 
+      ? meta.enum.filter(opt => (opt || "").toString().toLowerCase().includes((value || "").toString().toLowerCase()))
+      : meta.enum;
+
     return (
       <div key={fieldName} className="flex flex-col gap-1 w-full relative">
         {hasHandle && (
@@ -173,56 +185,88 @@ const RenderApiField = ({ fieldName, meta, idx, formValues, setFormValues, handl
           }}
           className="flex flex-col gap-1 relative w-full"
         >
-          <button
-            type="button"
-            ref={buttonRef} 
-            onClick={() => setDropDown((prev) => (prev === idx + 1 ? -1 : idx + 1))}
-            className="flex items-center justify-between gap-1 text-xs text-center w-full h-full cursor-pointer whitespace-nowrap px-2 py-[5px] border border-gray-600 focus:outline rounded"
+          <div 
+            ref={containerRef}
+            className="flex items-center gap-1 border border-gray-600 rounded bg-[#1f2125] relative"
           >
-            <div className="flex items-center gap-2 truncate">
-              <span className="truncate">{value}</span>
-            </div>
-            <FaAngleDown
-              size={14}
-              className={`transition-all duration-300 ease-in-out ${
-                dropDown === idx + 1 ? "rotate-180" : ""
-              }`}
-            />
-          </button>
+            {isManual ? (
+              <input
+                type="text"
+                value={value}
+                onChange={(e) => handleChange(fieldName, e.target.value)}
+                onFocus={() => setDropDown(idx + 1)}
+                placeholder="Select or type..."
+                className="flex-grow text-xs text-white bg-transparent outline-none px-2 py-[5px] w-full"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setDropDown((prev) => (prev === idx + 1 ? -1 : idx + 1))}
+                className="flex items-center justify-between gap-1 text-xs text-center text-white w-full h-full cursor-pointer whitespace-nowrap px-2 py-[5px] focus:outline-none"
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <span className="truncate">
+                    {(() => {
+                      if (typeof value === 'object') return value.label || value.value;
+                      const option = meta.enum?.find(opt => (typeof opt === 'object' ? opt.value : opt) === value);
+                      return typeof option === 'object' ? option.label : value;
+                    })()}
+                  </span>
+                </div>
+              </button>
+            )}
+            
+            <button
+              type="button"
+              onClick={() => setDropDown((prev) => (prev === idx + 1 ? -1 : idx + 1))}
+              className="px-2 text-gray-400 hover:text-white cursor-pointer border-l border-gray-700 h-full flex items-center justify-center"
+            >
+              <FaAngleDown
+                size={14}
+                className={`transition-all duration-300 ease-in-out ${
+                  dropDown === idx + 1 ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+          </div>
           <div
             tabIndex={-1}
             style={dropdownStyle}
-            className={`fixed border border-gray-500 p-1 rounded-md flex flex-col overflow-y-auto bg-[#1c1e21] shadow-xl ${
+            className={`fixed border border-gray-500 p-1 rounded-md flex flex-col overflow-y-auto bg-[#1c1e21] shadow-xl z-[9999] ${
               dropDown === idx + 1
                 ? "opacity-100 scale-100 visible"
                 : "opacity-0 scale-95 invisible"
             }`}
           >
-            {meta.enum.map((option, i) => (
-              <button
-                type="button"
-                key={i}
-                className={`flex items-center gap-2 p-1 text-xs cursor-pointer rounded hover:bg-[#33322f] ${
-                  formValues[fieldName] === option
-                    ? "text-white"
-                    : "text-gray-400 hover:text-white"
-                }
-                    `}
-                onClick={() => {handleChange(fieldName, option); setDropDown(-1)}}
-              >
-                <span className="truncate">{option}</span>
-                {formValues[fieldName] === option && (
-                  <span className="ml-auto text-white font-bold">✓</span>
-                )}
-              </button>
-            ))}
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((option, i) => (
+                <button
+                  type="button"
+                  key={i}
+                  className={`flex items-center gap-2 p-1 text-xs cursor-pointer rounded hover:bg-[#33322f] ${
+                    (typeof option === "object" ? formValues[fieldName] === option.value : formValues[fieldName] === option)
+                      ? "text-white"
+                      : "text-gray-400 hover:text-white"
+                  }
+                      `}
+                  onClick={() => {handleChange(fieldName, typeof option === "object" ? option.value : option); setDropDown(-1)}}
+                >
+                  <span className="truncate">{typeof option === "object" ? option.label || option.value : option}</span>
+                  {(typeof option === "object" ? formValues[fieldName] === option.value : formValues[fieldName] === option) && (
+                    <span className="ml-auto text-white font-bold">✓</span>
+                  )}
+                </button>
+              ))
+            ) : (
+              <div className="text-gray-500 text-xs p-2 text-center">No options found</div>
+            )}
           </div>
         </div>
       </div>
     );
   };
 
-  if (['image', 'last_image', 'video', 'audio'].includes(fieldName)) {
+  if (isImageField || isVideoField || isAudioField) {
     return (
       <div key={fieldName} className="flex flex-col gap-2 relative">
         {hasHandle && (
@@ -277,11 +321,11 @@ const RenderApiField = ({ fieldName, meta, idx, formValues, setFormValues, handl
         )}
         {formValues[fieldName] && (
           <div className="flex items-center gap-2 relative group overflow-hidden self-start w-full">
-            {fieldName === 'image' ? (
+            {isImageField || isImageUrl(value) ? (
               <img src={value} alt="Preview" className="w-24 h-24 object-cover border border-gray-300 rounded" width={0} height={0} />
-            ) : fieldName === 'video' ? (
+            ) : isVideoField ? (
               <video src={value} className="w-24 h-24 object-cover border border-gray-300 rounded" />
-            ) : fieldName === 'audio' && (
+            ) : isAudioField && (
               <div className="flex flex-col w-full h-16 border border-gray-300 rounded-md overflow-hidden">
                 <AudioPlayer src={value} />
               </div>
@@ -299,8 +343,8 @@ const RenderApiField = ({ fieldName, meta, idx, formValues, setFormValues, handl
     );
   };
 
-  if (["images"].includes(fieldName)) {
-    const imageList = formValues[fieldName] || [];
+  if (isImagesListField) {
+    const imageList = Array.isArray(formValues[fieldName]) ? formValues[fieldName] : [];
     return (
       <div key={fieldName} className="flex flex-col gap-1 relative">
         {hasHandle && (
@@ -319,13 +363,13 @@ const RenderApiField = ({ fieldName, meta, idx, formValues, setFormValues, handl
         <div className="grid grid-cols-3 gap-2">
           {imageList.map((url, idx) => (
             <div key={idx} className="flex items-center gap-2 relative group overflow-hidden">
-              {fieldName === 'images' ? (
+              {isImageUrl(url) ? (
                 <img 
                   src={url} 
                   alt="Preview" 
                   className="w-full h-full aspect-[1/1] object-cover border border-gray-500 rounded" 
                 />
-              ) : fieldName === 'videos' && (
+              ) : (url.includes('.mp4') || url.includes('.webm')) && (
                 <video 
                   src={url} 
                   className="w-full h-full aspect-[1/1] object-cover border border-gray-500 rounded" 
