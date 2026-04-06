@@ -37,8 +37,11 @@ async def proxy_request_helper(method: str, url: str, payload: Optional[dict] = 
                 raise HTTPException(status_code=405, detail=f"Method {method} not supported in proxy")
 
         except httpx.RequestError as e:
-            logger.error(f"Request error: {e}")
-            raise HTTPException(status_code=500, detail=f"Error contacting remote server: {e}")
+            logger.error(f"HTTPExt Request Error for {method} {url}: {e}")
+            raise HTTPException(status_code=500, detail=f"Error contacting remote server: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error in proxy_request_helper for {method} {url}: {e}")
+            raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
     try:
         if response.content:
@@ -51,8 +54,9 @@ async def proxy_request_helper(method: str, url: str, payload: Optional[dict] = 
     if response.status_code == 200:
         return resp_json
     else:
-        error = resp_json.get("detail", "Something went wrong")
-        raise HTTPException(status_code=response.status_code, detail=error)
+        error_detail = resp_json.get("detail", "Something went wrong")
+        logger.warning(f"Remote server returned {response.status_code}: {error_detail}")
+        raise HTTPException(status_code=response.status_code, detail=error_detail)
 
 async def create_or_update_workflow(payload: dict):
     url = "https://api.muapi.ai/workflow/create"

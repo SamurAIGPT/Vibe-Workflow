@@ -203,6 +203,7 @@ const ChatWidget = ({ isOpen, toggleChat, messages, onSendMessage, isLoading, on
   const [loadingStep, setLoadingStep] = useState(0);
   const [copiedId, setCopiedId] = useState(null);
   const [isWide, setIsWide] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const loadingTexts = ["Thinking", "Analyzing", "Generating", "Refining", "Processing", "Running"];
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -219,6 +220,10 @@ const ChatWidget = ({ isOpen, toggleChat, messages, onSendMessage, isLoading, on
     }
     return () => clearInterval(interval);
   }, [isLoading]);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -364,7 +369,7 @@ const ChatWidget = ({ isOpen, toggleChat, messages, onSendMessage, isLoading, on
                     {showDateLabel && (
                       <div className="flex justify-center my-2">
                         <span className="px-3 py-1 bg-white/5 text-[10px] uppercase font-bold text-gray-500 rounded-full border border-white/10">
-                          {formatMessageDate(msg.timestamp)}
+                          {isMounted ? formatMessageDate(msg.timestamp) : "---"}
                         </span>
                       </div>
                     )}
@@ -442,7 +447,7 @@ const ChatWidget = ({ isOpen, toggleChat, messages, onSendMessage, isLoading, on
                       </div>
                       <div className="flex items-center gap-2 mt-1 px-1">
                         <span className="text-[10px] text-gray-400">
-                          {formatMessageTime(msg.timestamp)}
+                          {isMounted ? formatMessageTime(msg.timestamp) : "--:--"}
                         </span>
                         <button
                           onClick={() => handleCopy(msg.content, idx)}
