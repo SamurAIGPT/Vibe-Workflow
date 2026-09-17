@@ -13,6 +13,8 @@
 
 ## Related Projects
 
+- [awesome-vibecoded-saas](https://github.com/Anil-matcha/awesome-vibecoded-saas) — broader catalog of open-source SaaS alternatives featuring Vibe Workflow.
+- [Muapi open-source alternatives](https://muapi.ai/open-source/alternative/krea) — compare this workflow editor with the Krea workflow and its honest scope.
 - [Open-Generative-AI](https://github.com/Anil-matcha/Open-Generative-AI) — Free self-hosted AI media studio — model backend for your pipelines
 - [Open-AI-Design-Agent](https://github.com/Anil-matcha/Open-AI-Design-Agent) — Autonomous AI design agent to embed in your workflows
 
